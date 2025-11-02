@@ -1,9 +1,9 @@
-   <!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Precificação Krairous</title>
+    <title>Calculadoras de Precificação e Auxiliar | Nazireu Driguex</title>
     <!-- Carregamento do Tailwind CSS para estilo -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Carregamento do React e ReactDOM -->
@@ -14,97 +14,215 @@
     <style>
         /* Define a fonte Inter por padrão */
         body { font-family: 'Inter', sans-serif; }
+        /* Estilo para garantir que os botões da calculadora tenham boa proporção */
+        .calc-button {
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
     </style>
 </head>
 <body>
 
     <!-- Ponto de montagem da aplicação React -->
     <div id="root">
-        <!-- Indicador de carregamento enquanto o React inicializa -->
         <div class="flex justify-center items-center min-h-screen bg-gray-100">
-            <p class="text-xl text-gray-600 animate-pulse">Carregando Calculadora...</p>
+            <p class="text-xl text-gray-600 animate-pulse">Carregando Calculadoras...</p>
         </div>
     </div>
 
-    <!-- Script principal com o código React/JSX
-         O atributo type="text/babel" é CRÍTICO para que o Babel compile o JSX para JavaScript puro. -->
+    <!-- Script principal com o código React/JSX -->
     <script type="text/babel">
-        // A partir daqui, o código é React/JSX (como no arquivo anterior)
-
         const { useState, useCallback, useEffect } = React;
-        const { createRoot } = ReactDOM; // Usamos desestruturação para obter createRoot
+        const { createRoot } = ReactDOM;
 
-        // Componente principal App
-        const App = () => {
-            // --- ESTADO DA APLICAÇÃO ---
-            const [isAuthenticated, setIsAuthenticated] = useState(false);
-            const [passwordInput, setPasswordInput] = useState('');
+        // --- FUNÇÕES DE UTENSÍLIO GERAIS ---
+        
+        // Função para formatar o valor como moeda brasileira (R$)
+        const formatCurrency = (value) => {
+            if (value === null || isNaN(value)) return 'R$ 0,00';
+            return new Intl.NumberFormat('pt-BR', {
+                style: 'currency',
+                currency: 'BRL'
+            }).format(value);
+        };
 
+        // Função para limpar e normalizar números (troca vírgula por ponto, remove R$)
+        const normalizeNumber = (input) => {
+            if (!input) return 0;
+            // Permite que o usuário use vírgula como separador decimal no input
+            return parseFloat(String(input).replace(/[R$\s]/g, '').replace(',', '.'));
+        };
+
+        // Função para lidar com a imprecisão do floating point
+        const preciseOp = (op, a, b) => {
+            const factor = 100000; 
+            switch (op) {
+                case '+': return (a * factor + b * factor) / factor;
+                case '-': return (a * factor - b * factor) / factor;
+                case '*': return a * b; 
+                case '/': 
+                    if (b === 0) return 'Erro';
+                    return a / b;
+                default: return 0;
+            }
+        };
+
+
+        // --- COMPONENTE 1: CALCULADORA AUXILIAR (TOTALMENTE ISOLADA) ---
+
+        const AuxCalculator = () => {
+            const [display, setDisplay] = useState('0');
+            const [value, setValue] = useState(null);
+            const [operator, setOperator] = useState(null);
+            const [waitingForNewValue, setWaitingForNewValue] = useState(false);
+
+            const handleNumber = useCallback((num) => {
+                if (display === '0' || waitingForNewValue || display === 'Erro') {
+                    setDisplay(String(num));
+                    setWaitingForNewValue(false);
+                } else {
+                    if (display.length < 15) {
+                        setDisplay(display + String(num));
+                    }
+                }
+            }, [display, waitingForNewValue]);
+
+            const handleDecimal = useCallback(() => {
+                if (waitingForNewValue || display === 'Erro') {
+                    setDisplay('0.');
+                    setWaitingForNewValue(false);
+                } else if (!display.includes('.')) {
+                    setDisplay(display + '.');
+                }
+            }, [display, waitingForNewValue]);
+
+            const handleClear = useCallback(() => {
+                setDisplay('0');
+                setValue(null);
+                setOperator(null);
+                setWaitingForNewValue(false);
+            }, []);
+
+            const handleEquals = useCallback(() => {
+                if (operator === null || value === null || display === 'Erro') return;
+
+                const nextVal = parseFloat(display);
+                const result = preciseOp(operator, value, nextVal);
+
+                if (result === 'Erro') {
+                    setDisplay('Erro');
+                } else {
+                    const resultString = parseFloat(result.toFixed(8)).toString();
+                    setDisplay(resultString);
+                }
+                
+                setValue(null);
+                setOperator(null);
+                setWaitingForNewValue(true);
+
+            }, [display, operator, value]);
+
+            const handleOperator = useCallback((nextOperator) => {
+                if (display === 'Erro') return;
+                const inputVal = parseFloat(display);
+
+                if (value === null || waitingForNewValue) {
+                    setValue(inputVal);
+                } else {
+                    const result = preciseOp(operator, value, inputVal);
+                    
+                    if (result === 'Erro') {
+                         setDisplay('Erro');
+                         setValue(null);
+                         setOperator(null);
+                    } else {
+                        const resultString = parseFloat(result.toFixed(8)).toString();
+                        setDisplay(resultString);
+                        setValue(result);
+                    }
+                }
+                
+                setOperator(nextOperator);
+                setWaitingForNewValue(true);
+
+            }, [display, value, waitingForNewValue, operator]);
+
+            return (
+                <section className="bg-white p-6 sm:p-8 rounded-xl shadow-2xl border-t-4 border-gray-400 lg:col-span-1">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-3 text-center">CALCULADORA AUXILIAR</h2>
+
+                    {/* Display */}
+                    <div className="bg-gray-800 text-white text-3xl font-mono text-right p-4 rounded-xl mb-4 overflow-hidden shadow-inner h-16 flex items-center justify-end">
+                        {display.length > 15 ? display.substring(0, 15) + '...' : display}
+                    </div>
+                    
+                    {/* Teclado */}
+                    <div className="grid grid-cols-4 gap-2">
+                        {/* Linha 1 */}
+                        {['7', '8', '9'].map(n => (
+                            <button key={n} onClick={() => handleNumber(n)} className="calc-button bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
+                                {n}
+                            </button>
+                        ))}
+                        <button onClick={() => handleOperator('/')} className="calc-button bg-orange-500 rounded-lg text-xl font-bold text-white hover:bg-orange-600 transition duration-150 shadow-md">
+                            /
+                        </button>
+
+                        {/* Linha 2 */}
+                        {['4', '5', '6'].map(n => (
+                            <button key={n} onClick={() => handleNumber(n)} className="calc-button bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
+                                {n}
+                            </button>
+                        ))}
+                        <button onClick={() => handleOperator('*')} className="calc-button bg-orange-500 rounded-lg text-xl font-bold text-white hover:bg-orange-600 transition duration-150 shadow-md">
+                            x
+                        </button>
+
+                        {/* Linha 3 */}
+                        {['1', '2', '3'].map(n => (
+                            <button key={n} onClick={() => handleNumber(n)} className="calc-button bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
+                            {n}
+                            </button>
+                        ))}
+                        <button onClick={() => handleOperator('-')} className="calc-button bg-orange-500 rounded-lg text-xl font-bold text-white hover:bg-orange-600 transition duration-150 shadow-md">
+                            -
+                        </button>
+
+                        {/* Linha 4 */}
+                        <button onClick={handleDecimal} className="calc-button bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
+                            .
+                        </button>
+                        <button onClick={() => handleNumber('0')} className="calc-button bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
+                            0
+                        </button>
+                        <button onClick={handleClear} className="calc-button bg-red-500 rounded-lg text-xl font-bold text-white hover:bg-red-600 transition duration-150 shadow-md">
+                            C
+                        </button>
+                        <button onClick={() => handleOperator('+')} className="calc-button bg-orange-500 rounded-lg text-xl font-bold text-white hover:bg-orange-600 transition duration-150 shadow-md">
+                            +
+                        </button>
+
+                        {/* Linha Final (Sinal de igual) */}
+                        <button onClick={handleEquals} className="col-span-4 calc-button mt-2 bg-green-500 rounded-lg text-2xl font-bold text-white hover:bg-green-600 transition duration-150 shadow-lg">
+                            =
+                        </button>
+                    </div>
+                </section>
+            );
+        };
+
+
+        // --- COMPONENTE 2: CALCULADORA DE PRECIFICAÇÃO ---
+
+        const PricingCalculator = () => {
             // Estado para os campos de entrada da precificação
             const [custo, setCusto] = useState('');
             const [imposto, setImposto] = useState('');
             const [lucro, setLucro] = useState('');
             // Estado para o resultado final
             const [precoVenda, setPrecoVenda] = useState('R$ 0,00');
-
-            // Estado da mensagem de feedback
-            const [feedbackMessage, setFeedbackMessage] = useState('');
-
-            // Estado para a calculadora auxiliar (rascunho)
-            const [auxDisplay, setAuxDisplay] = useState('0');
-            const [auxValue, setAuxValue] = useState(null);
-            const [auxOperator, setAuxOperator] = useState(null);
-            const [waitingForNewValue, setWaitingForNewValue] = useState(false);
-
-            // --- FUNÇÕES DE UTENSÍLIO ---
-
-            // Função para formatar o valor como moeda brasileira (R$)
-            const formatCurrency = (value) => {
-                if (value === null || isNaN(value)) return 'R$ 0,00';
-                return new Intl.NumberFormat('pt-BR', {
-                    style: 'currency',
-                    currency: 'BRL'
-                }).format(value);
-            };
-
-            // Função para limpar e normalizar números (troca vírgula por ponto, remove R$)
-            const normalizeNumber = (input) => {
-                if (!input) return 0;
-                // Permite que o usuário use vírgula como separador decimal no input
-                return parseFloat(String(input).replace(/[R$\s]/g, '').replace(',', '.'));
-            };
-
-            // Função auxiliar para lidar com a imprecisão do floating point (usada na calculadora auxiliar)
-            const preciseOp = (op, a, b) => {
-                // Usa fator de precisão para evitar erros como 0.1 + 0.2
-                const factor = 100000; 
-                
-                switch (op) {
-                    case '+': return (a * factor + b * factor) / factor;
-                    case '-': return (a * factor - b * factor) / factor;
-                    case '*': return a * b; // Multiplicação costuma ser mais estável
-                    case '/': 
-                        if (b === 0) return 'Erro';
-                        return a / b;
-                    default: return 0;
-                }
-            };
-
-
-            // --- LÓGICA DE AUTENTICAÇÃO ---
-
-            const handleLogin = useCallback((e) => {
-                e.preventDefault();
-                // A senha de acesso é 'krairous007'
-                if (passwordInput === 'krairous007') {
-                    setIsAuthenticated(true);
-                } else {
-                    console.log('Senha incorreta.'); 
-                    setPasswordInput('');
-                }
-            }, [passwordInput]);
-
-            // --- LÓGICA PRINCIPAL DE PRECIFICAÇÃO ---
 
             const calculatePrecoVenda = useCallback(() => {
                 const C = normalizeNumber(custo);
@@ -139,114 +257,99 @@
                 calculatePrecoVenda();
             }, [custo, imposto, lucro, calculatePrecoVenda]);
 
-            // --- LÓGICA DA CALCULADORA AUXILIAR (Aprimorada e Isolada) ---
+            return (
+                <section className="bg-white p-6 sm:p-8 rounded-xl shadow-2xl border-t-4 border-blue-600 lg:col-span-2">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-3">Cálculo de Preço de Venda (Markup Integrado)</h2>
 
-            const handleAuxNumber = useCallback((num) => {
-                if (auxDisplay === '0' || waitingForNewValue || auxDisplay === 'Erro') {
-                    setAuxDisplay(String(num));
-                    setWaitingForNewValue(false);
+                    <div className="space-y-6">
+                        {/* Custo do Produto */}
+                        <div className="relative">
+                            <label htmlFor="custo" className="block text-lg font-medium text-gray-700 mb-2">1. Custo do Produto (R$):</label>
+                            <input
+                                id="custo"
+                                type="text"
+                                value={custo}
+                                onChange={(e) => setCusto(e.target.value.replace(/[^0-9,.]/g, ''))}
+                                placeholder="0,00"
+                                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-orange-500 focus:border-orange-500 text-xl text-gray-800"
+                            />
+                            {/* Unidade R$ */}
+                            <span className="absolute right-3 top-11 text-lg font-semibold text-gray-500">R$</span>
+                        </div>
+
+                        {/* Imposto Total (%) */}
+                        <div className="relative">
+                            <label htmlFor="imposto" className="block text-lg font-medium text-gray-700 mb-2">2. Imposto Total (%):</label>
+                            <input
+                                id="imposto"
+                                type="text"
+                                value={imposto}
+                                onChange={(e) => setImposto(e.target.value.replace(/[^0-9,.]/g, ''))}
+                                placeholder="0"
+                                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-orange-500 focus:border-orange-500 text-xl text-gray-800"
+                            />
+                            {/* Unidade % */}
+                            <span className="absolute right-3 top-11 text-lg font-semibold text-gray-500">%</span>
+                        </div>
+
+                        {/* Margem de Lucro Desejada (%) */}
+                        <div className="relative">
+                            <label htmlFor="lucro" className="block text-lg font-medium text-gray-700 mb-2">3. Margem de Lucro Desejada (%):</label>
+                            <input
+                                id="lucro"
+                                type="text"
+                                value={lucro}
+                                onChange={(e) => setLucro(e.target.value.replace(/[^0-9,.]/g, ''))}
+                                placeholder="0"
+                                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-orange-500 focus:border-orange-500 text-xl text-gray-800"
+                            />
+                            {/* Unidade % */}
+                            <span className="absolute right-3 top-11 text-lg font-semibold text-gray-500">%</span>
+                        </div>
+                    </div>
+
+                    {/* Botão de Cálculo (Mantido para UX, mas cálculo é automático) */}
+                    <button
+                        onClick={calculatePrecoVenda}
+                        className="w-full mt-8 py-3 px-6 rounded-xl text-xl font-extrabold text-white bg-orange-500 hover:bg-orange-600 transition duration-200 shadow-lg transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-orange-300"
+                    >
+                        CALCULAR PREÇO DE VENTA
+                    </button>
+
+                    {/* Resultado Final */}
+                    <div className="mt-8 pt-6 border-t border-gray-200">
+                        <p className="text-xl font-semibold text-blue-600 mb-2">PREÇO DE VENDA FINAL CALCULADO:</p>
+                        <div className={`text-4xl font-extrabold p-4 rounded-xl text-center shadow-inner ${precoVenda.includes('R$') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {precoVenda}
+                        </div>
+                        {precoVenda === 'MARGEM INVÁLIDA' && (
+                            <p className="text-sm text-red-500 mt-2 text-center">
+                                *Soma do Imposto + Lucro é maior ou igual a 100%. Ajuste as margens.
+                            </p>
+                        )}
+                    </div>
+                </section>
+            );
+        };
+
+
+        // --- COMPONENTE PRINCIPAL (Autenticação + Layout) ---
+
+        const App = () => {
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [passwordInput, setPasswordInput] = useState('');
+
+            const handleLogin = useCallback((e) => {
+                e.preventDefault();
+                // A senha de acesso é 'krairous007'
+                if (passwordInput === 'krairous007') {
+                    setIsAuthenticated(true);
                 } else {
-                    // Limita a 15 dígitos para evitar overflow de display
-                    if (auxDisplay.length < 15) {
-                        setAuxDisplay(auxDisplay + String(num));
-                    }
+                    console.log('Senha incorreta.'); 
+                    setPasswordInput('');
                 }
-            }, [auxDisplay, waitingForNewValue]);
+            }, [passwordInput]);
 
-            const handleAuxDecimal = useCallback(() => {
-                if (waitingForNewValue || auxDisplay === 'Erro') {
-                    setAuxDisplay('0.');
-                    setWaitingForNewValue(false);
-                } else if (!auxDisplay.includes('.')) {
-                    setAuxDisplay(auxDisplay + '.');
-                }
-            }, [auxDisplay, waitingForNewValue]);
-
-            const handleAuxClear = useCallback(() => {
-                setAuxDisplay('0');
-                setAuxValue(null);
-                setAuxOperator(null);
-                setWaitingForNewValue(false);
-            }, []);
-
-            const handleAuxEquals = useCallback(() => {
-                if (auxOperator === null || auxValue === null || auxDisplay === 'Erro') return;
-
-                const nextVal = parseFloat(auxDisplay);
-                const result = preciseOp(auxOperator, auxValue, nextVal);
-
-                if (result === 'Erro') {
-                    setAuxDisplay('Erro');
-                } else {
-                    // Limita o resultado e remove zeros à direita
-                    const resultString = parseFloat(result.toFixed(8)).toString();
-                    setAuxDisplay(resultString);
-                }
-                
-                setAuxValue(null);
-                setAuxOperator(null);
-                setWaitingForNewValue(true);
-
-            }, [auxDisplay, auxOperator, auxValue]);
-
-            const handleAuxOperator = useCallback((nextOperator) => {
-                if (auxDisplay === 'Erro') return;
-                const inputVal = parseFloat(auxDisplay);
-
-                if (auxValue === null || waitingForNewValue) {
-                    // Armazena o primeiro valor ou o resultado de um cálculo anterior
-                    setAuxValue(inputVal);
-                } else {
-                    // Se já tem um operador e um valor anterior, calcula o resultado intermediário
-                    const result = preciseOp(auxOperator, auxValue, inputVal);
-                    
-                    if (result === 'Erro') {
-                         setAuxDisplay('Erro');
-                         setAuxValue(null);
-                         setAuxOperator(null);
-                    } else {
-                        const resultString = parseFloat(result.toFixed(8)).toString();
-                        setAuxDisplay(resultString);
-                        setAuxValue(result);
-                    }
-                }
-                
-                setAuxOperator(nextOperator);
-                setWaitingForNewValue(true);
-
-            }, [auxDisplay, auxValue, waitingForNewValue, auxOperator]);
-
-
-            // --- FUNÇÃO DE TRANSFERÊNCIA ISOLADA ---
-
-            const useAuxResult = useCallback(() => {
-                if (auxDisplay === '0' || auxDisplay === 'Erro') {
-                    setFeedbackMessage('Nenhum resultado válido para usar.');
-                    return;
-                }
-
-                // Obtém o resultado da calculadora auxiliar (que está em formato de string com ponto decimal)
-                const resultString = auxDisplay;
-
-                // Converte para o formato de vírgula que o input principal espera
-                const formattedResult = resultString.replace('.', ',');
-                
-                // Transfere o valor para o campo Custo do Produto
-                setCusto(formattedResult);
-                setFeedbackMessage('Valor copiado para o campo "1. Custo do Produto (R$)"');
-
-                // Limpa a calculadora auxiliar após o uso
-                handleAuxClear();
-
-                // Limpa a mensagem de feedback após um tempo
-                setTimeout(() => setFeedbackMessage(''), 3000);
-
-            }, [auxDisplay, handleAuxClear]);
-
-
-            // --- RENDERIZAÇÃO DE COMPONENTES ---
-
-            // 1. Tela de Acesso Restrito
             if (!isAuthenticated) {
                 return (
                     <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -280,174 +383,37 @@
                 );
             }
 
-            // 2. Tela Principal da Calculadora
             return (
                 <div className="p-4 sm:p-8 min-h-screen bg-gray-100 font-sans">
-                    {/* Título Principal */}
+                    {/* Título Principal atualizado com Nazireu Driguex */}
                     <header className="mb-8 text-center">
                         <h1 className="text-3xl sm:text-4xl font-extrabold text-blue-700 shadow-sm py-2">
-                            SISTEMA DE PRECIFICAÇÃO INTEGRADA KRAIROUS
+                            SISTEMA DE PRECIFICAÇÃO NAZIREU DRIGUEX
                         </h1>
                     </header>
 
                     {/* Container Principal com Layout de Grid (Responsivo) */}
                     <main className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
                         
-                        {/* 1. CALCULADORA DE PRECIFICAÇÃO (COLUNA ESQUERDA) */}
-                        <section className="bg-white p-6 sm:p-8 rounded-xl shadow-2xl border-t-4 border-blue-600 lg:col-span-2">
-                            <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-3">Cálculo de Preço de Venda (Markup Integrado)</h2>
+                        {/* 1. CALCULADORA DE PRECIFICAÇÃO (MAIOR ESPAÇO) */}
+                        <div className="lg:col-span-2">
+                             <PricingCalculator />
+                        </div>
 
-                            <div className="space-y-6">
-                                {/* Custo do Produto */}
-                                <div className="relative">
-                                    <label htmlFor="custo" className="block text-lg font-medium text-gray-700 mb-2">1. Custo do Produto (R$):</label>
-                                    <input
-                                        id="custo"
-                                        type="text"
-                                        // Permite apenas números, ponto e vírgula
-                                        value={custo}
-                                        onChange={(e) => setCusto(e.target.value.replace(/[^0-9,.]/g, ''))}
-                                        placeholder="0,00"
-                                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-orange-500 focus:border-orange-500 text-xl text-gray-800"
-                                    />
-                                    {/* Unidade R$ */}
-                                    <span className="absolute right-3 top-11 text-lg font-semibold text-gray-500">R$</span>
-                                </div>
-
-                                {/* Imposto Total (%) */}
-                                <div className="relative">
-                                    <label htmlFor="imposto" className="block text-lg font-medium text-gray-700 mb-2">2. Imposto Total (%):</label>
-                                    <input
-                                        id="imposto"
-                                        type="text"
-                                        value={imposto}
-                                        onChange={(e) => setImposto(e.target.value.replace(/[^0-9,.]/g, ''))}
-                                        placeholder="0"
-                                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-orange-500 focus:border-orange-500 text-xl text-gray-800"
-                                    />
-                                    {/* Unidade % */}
-                                    <span className="absolute right-3 top-11 text-lg font-semibold text-gray-500">%</span>
-                                </div>
-
-                                {/* Margem de Lucro Desejada (%) */}
-                                <div className="relative">
-                                    <label htmlFor="lucro" className="block text-lg font-medium text-gray-700 mb-2">3. Margem de Lucro Desejada (%):</label>
-                                    <input
-                                        id="lucro"
-                                        type="text"
-                                        value={lucro}
-                                        onChange={(e) => setLucro(e.target.value.replace(/[^0-9,.]/g, ''))}
-                                        placeholder="0"
-                                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-orange-500 focus:border-orange-500 text-xl text-gray-800"
-                                    />
-                                    {/* Unidade % */}
-                                    <span className="absolute right-3 top-11 text-lg font-semibold text-gray-500">%</span>
-                                </div>
-                            </div>
-
-                            {/* Botão de Cálculo (Recálculo é automático, mas mantido para UX) */}
-                            <button
-                                onClick={calculatePrecoVenda}
-                                className="w-full mt-8 py-3 px-6 rounded-xl text-xl font-extrabold text-white bg-orange-500 hover:bg-orange-600 transition duration-200 shadow-lg transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-orange-300"
-                            >
-                                CALCULAR PREÇO DE VENDA
-                            </button>
-
-                            {/* Resultado Final */}
-                            <div className="mt-8 pt-6 border-t border-gray-200">
-                                <p className="text-xl font-semibold text-blue-600 mb-2">PREÇO DE VENDA FINAL CALCULADO:</p>
-                                <div className={`text-4xl font-extrabold p-4 rounded-xl text-center shadow-inner ${precoVenda.includes('R$') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                    {precoVenda}
-                                </div>
-                                {precoVenda === 'MARGEM INVÁLIDA' && (
-                                    <p className="text-sm text-red-500 mt-2 text-center">
-                                        *Soma do Imposto + Lucro é maior ou igual a 100%. Ajuste as margens para que o cálculo seja possível.
-                                    </p>
-                                )}
-                                {/* Mensagem de Feedback da Transferência */}
-                                {feedbackMessage && (
-                                    <div className="mt-4 p-2 bg-yellow-100 text-yellow-800 rounded-lg text-center font-medium">
-                                        {feedbackMessage}
-                                    </div>
-                                )}
-                            </div>
-                        </section>
-
-                        {/* 2. CALCULADORA AUXILIAR (COLUNA DIREITA) */}
-                        <section className="bg-white p-6 sm:p-8 rounded-xl shadow-2xl border-t-4 border-gray-400 lg:col-span-1">
-                            <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-3 text-center">CALCULADORA AUXILIAR</h2>
-
-                            {/* Display da Calculadora Auxiliar */}
-                            <div className="bg-gray-800 text-white text-3xl font-mono text-right p-4 rounded-xl mb-4 overflow-hidden shadow-inner h-16 flex items-center justify-end">
-                                {auxDisplay.length > 15 ? auxDisplay.substring(0, 15) + '...' : auxDisplay}
-                            </div>
-                            
-                            {/* Teclado da Calculadora Auxiliar */}
-                            <div className="grid grid-cols-4 gap-2">
-                                {/* Linha 1 */}
-                                {['7', '8', '9'].map(n => (
-                                    <button key={n} onClick={() => handleAuxNumber(n)} className="p-4 bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
-                                        {n}
-                                    </button>
-                                ))}
-                                <button onClick={() => handleAuxOperator('/')} className="p-4 bg-orange-500 rounded-lg text-xl font-bold text-white hover:bg-orange-600 transition duration-150 shadow-md">
-                                    /
-                                </button>
-
-                                {/* Linha 2 */}
-                                {['4', '5', '6'].map(n => (
-                                    <button key={n} onClick={() => handleAuxNumber(n)} className="p-4 bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
-                                        {n}
-                                    </button>
-                                ))}
-                                <button onClick={() => handleAuxOperator('*')} className="p-4 bg-orange-500 rounded-lg text-xl font-bold text-white hover:bg-orange-600 transition duration-150 shadow-md">
-                                    x
-                                </button>
-
-                                {/* Linha 3 */}
-                                {['1', '2', '3'].map(n => (
-                                    <button key={n} onClick={() => handleAuxNumber(n)} className="p-4 bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
-                                    {n}
-                                    </button>
-                                ))}
-                                <button onClick={() => handleAuxOperator('-')} className="p-4 bg-orange-500 rounded-lg text-xl font-bold text-white hover:bg-orange-600 transition duration-150 shadow-md">
-                                    -
-                                </button>
-
-                                {/* Linha 4 */}
-                                <button onClick={handleAuxDecimal} className="p-4 bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
-                                    .
-                                </button>
-                                <button onClick={() => handleAuxNumber('0')} className="p-4 bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
-                                    0
-                                </button>
-                                <button onClick={handleAuxClear} className="p-4 bg-red-500 rounded-lg text-xl font-bold text-white hover:bg-red-600 transition duration-150 shadow-md">
-                                    C
-                                </button>
-                                <button onClick={() => handleAuxOperator('+')} className="p-4 bg-orange-500 rounded-lg text-xl font-bold text-white hover:bg-orange-600 transition duration-150 shadow-md">
-                                    +
-                                </button>
-
-                                {/* Linha Final (Sinal de igual e Botão USAR) */}
-                                <button onClick={handleAuxEquals} className="col-span-2 p-4 mt-2 bg-green-500 rounded-lg text-2xl font-bold text-white hover:bg-green-600 transition duration-150 shadow-lg">
-                                    =
-                                </button>
-                                 <button onClick={useAuxResult} className="col-span-2 p-4 mt-2 bg-purple-500 rounded-lg text-2xl font-bold text-white hover:bg-purple-600 transition duration-150 shadow-lg">
-                                    Usar
-                                </button>
-                            </div>
-                        </section>
+                        {/* 2. CALCULADORA AUXILIAR (ESPAÇO MENOR) */}
+                        <div>
+                             <AuxCalculator />
+                        </div>
+                       
                     </main>
                 </div>
             );
         };
 
         // --- INICIALIZAÇÃO DO REACT ---
-        // Garante que o script só execute após o carregamento completo do DOM
         window.addEventListener('load', () => {
             const rootElement = document.getElementById('root');
             if (rootElement) {
-                // Cria a raiz do React e renderiza o componente App
                 ReactDOM.createRoot(rootElement).render(<App />);
             }
         });
