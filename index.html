@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -10,7 +10,7 @@
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <!-- Carregamento do Babel para compilar JSX no navegador (CRÍTICO para single-file .html) -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.js"></script>
     <style>
         /* Define a fonte Inter por padrão */
         body { font-family: 'Inter', sans-serif; }
@@ -308,12 +308,12 @@
                         </div>
                     </div>
 
-                    {/* Botão de Cálculo (Mantido para UX, mas cálculo é automático) */}
+                    {/* Botão de Cálculo (AGORA COM VENDA CORRETO) */}
                     <button
                         onClick={calculatePrecoVenda}
                         className="w-full mt-8 py-3 px-6 rounded-xl text-xl font-extrabold text-white bg-orange-500 hover:bg-orange-600 transition duration-200 shadow-lg transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-orange-300"
                     >
-                        CALCULAR PREÇO DE VENTA
+                        CALCULAR PREÇO DE VENDA 
                     </button>
 
                     {/* Resultado Final */}
