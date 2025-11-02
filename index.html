@@ -1,5 +1,5 @@
-                  import React, { useState, useCallback, useEffect } from 'react';
-import ReactDOM from 'react-dom';
+  import React, { useState, useCallback, useEffect } from 'react';
+import ReactDOM from 'react-dom'; // Importaremos o createRoot a partir daqui
 
 // Componente principal App
 const App = () => {
@@ -13,6 +13,9 @@ const App = () => {
     const [lucro, setLucro] = useState('');
     // Estado para o resultado final
     const [precoVenda, setPrecoVenda] = useState('R$ 0,00');
+
+    // Estado da mensagem de feedback
+    const [feedbackMessage, setFeedbackMessage] = useState('');
 
     // Estado para a calculadora auxiliar (rascunho)
     const [auxDisplay, setAuxDisplay] = useState('0');
@@ -37,22 +40,19 @@ const App = () => {
         // Permite que o usuário use vírgula como separador decimal no input
         return parseFloat(String(input).replace(/[R$\s]/g, '').replace(',', '.'));
     };
-    
+
     // Função auxiliar para lidar com a imprecisão do floating point (usada na calculadora auxiliar)
     const preciseOp = (op, a, b) => {
-        const factor = 100000; // Fator de precisão (para evitar 0.1 + 0.2 = 0.30000000000000004)
-        a = Math.round(a * factor);
-        b = Math.round(b * factor);
-
+        // Usa fator de precisão para evitar erros como 0.1 + 0.2
+        const factor = 100000; 
+        
         switch (op) {
-            case '+': return (a + b) / factor;
-            case '-': return (a - b) / factor;
-            case '*': return (a * b) / (factor * factor); // Ajuste para multiplicação
+            case '+': return (a * factor + b * factor) / factor;
+            case '-': return (a * factor - b * factor) / factor;
+            case '*': return a * b; // Multiplicação costuma ser mais estável
             case '/': 
-                // Evita divisão por zero
                 if (b === 0) return 'Erro';
-                // Para a divisão, fazemos a operação com o fator e dividimos pelo fator
-                return (a / factor) / (b / factor);
+                return a / b;
             default: return 0;
         }
     };
@@ -66,7 +66,6 @@ const App = () => {
         if (passwordInput === 'krairous007') {
             setIsAuthenticated(true);
         } else {
-            // Não usando alert() conforme instruído
             console.log('Senha incorreta.'); 
             setPasswordInput('');
         }
@@ -107,10 +106,10 @@ const App = () => {
         calculatePrecoVenda();
     }, [custo, imposto, lucro, calculatePrecoVenda]);
 
-    // --- LÓGICA DA CALCULADORA AUXILIAR (Aprimorada) ---
+    // --- LÓGICA DA CALCULADORA AUXILIAR (Aprimorada e Isolada) ---
 
     const handleAuxNumber = useCallback((num) => {
-        if (auxDisplay === '0' || waitingForNewValue) {
+        if (auxDisplay === '0' || waitingForNewValue || auxDisplay === 'Erro') {
             setAuxDisplay(String(num));
             setWaitingForNewValue(false);
         } else {
@@ -122,7 +121,7 @@ const App = () => {
     }, [auxDisplay, waitingForNewValue]);
 
     const handleAuxDecimal = useCallback(() => {
-        if (waitingForNewValue) {
+        if (waitingForNewValue || auxDisplay === 'Erro') {
             setAuxDisplay('0.');
             setWaitingForNewValue(false);
         } else if (!auxDisplay.includes('.')) {
@@ -138,16 +137,15 @@ const App = () => {
     }, []);
 
     const handleAuxEquals = useCallback(() => {
-        if (auxOperator === null || auxValue === null) return;
+        if (auxOperator === null || auxValue === null || auxDisplay === 'Erro') return;
 
         const nextVal = parseFloat(auxDisplay);
         const result = preciseOp(auxOperator, auxValue, nextVal);
 
-        // Verifica se houve erro de divisão por zero
         if (result === 'Erro') {
             setAuxDisplay('Erro');
         } else {
-            // Limita a 8 casas decimais e remove zeros à direita
+            // Limita o resultado e remove zeros à direita
             const resultString = parseFloat(result.toFixed(8)).toString();
             setAuxDisplay(resultString);
         }
@@ -159,6 +157,7 @@ const App = () => {
     }, [auxDisplay, auxOperator, auxValue]);
 
     const handleAuxOperator = useCallback((nextOperator) => {
+        if (auxDisplay === 'Erro') return;
         const inputVal = parseFloat(auxDisplay);
 
         if (auxValue === null || waitingForNewValue) {
@@ -183,6 +182,33 @@ const App = () => {
         setWaitingForNewValue(true);
 
     }, [auxDisplay, auxValue, waitingForNewValue, auxOperator]);
+
+
+    // --- FUNÇÃO DE TRANSFERÊNCIA ISOLADA ---
+
+    const useAuxResult = useCallback(() => {
+        if (auxDisplay === '0' || auxDisplay === 'Erro') {
+            setFeedbackMessage('Nenhum resultado válido para usar.');
+            return;
+        }
+
+        // Obtém o resultado da calculadora auxiliar (que está em formato de string com ponto decimal)
+        const resultString = auxDisplay;
+
+        // Converte para o formato de vírgula que o input principal espera
+        const formattedResult = resultString.replace('.', ',');
+        
+        // Transfere o valor para o campo Custo do Produto
+        setCusto(formattedResult);
+        setFeedbackMessage('Valor copiado para o campo "1. Custo do Produto (R$)"');
+
+        // Limpa a calculadora auxiliar após o uso
+        handleAuxClear();
+
+        // Limpa a mensagem de feedback após um tempo
+        setTimeout(() => setFeedbackMessage(''), 3000);
+
+    }, [auxDisplay, handleAuxClear]);
 
 
     // --- RENDERIZAÇÃO DE COMPONENTES ---
@@ -241,21 +267,23 @@ const App = () => {
 
                     <div className="space-y-6">
                         {/* Custo do Produto */}
-                        <div>
+                        <div className="relative">
                             <label htmlFor="custo" className="block text-lg font-medium text-gray-700 mb-2">1. Custo do Produto (R$):</label>
                             <input
                                 id="custo"
                                 type="text"
-                                // Permite apenas números, ponto e vírgula, e usa vírgula para formatação no display
+                                // Permite apenas números, ponto e vírgula
                                 value={custo}
                                 onChange={(e) => setCusto(e.target.value.replace(/[^0-9,.]/g, ''))}
                                 placeholder="0,00"
                                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-orange-500 focus:border-orange-500 text-xl text-gray-800"
                             />
+                            {/* Unidade R$ */}
+                            <span className="absolute right-3 top-11 text-lg font-semibold text-gray-500">R$</span>
                         </div>
 
                         {/* Imposto Total (%) */}
-                        <div>
+                        <div className="relative">
                             <label htmlFor="imposto" className="block text-lg font-medium text-gray-700 mb-2">2. Imposto Total (%):</label>
                             <input
                                 id="imposto"
@@ -265,10 +293,12 @@ const App = () => {
                                 placeholder="0"
                                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-orange-500 focus:border-orange-500 text-xl text-gray-800"
                             />
+                            {/* Unidade % */}
+                            <span className="absolute right-3 top-11 text-lg font-semibold text-gray-500">%</span>
                         </div>
 
                         {/* Margem de Lucro Desejada (%) */}
-                        <div>
+                        <div className="relative">
                             <label htmlFor="lucro" className="block text-lg font-medium text-gray-700 mb-2">3. Margem de Lucro Desejada (%):</label>
                             <input
                                 id="lucro"
@@ -278,6 +308,8 @@ const App = () => {
                                 placeholder="0"
                                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-orange-500 focus:border-orange-500 text-xl text-gray-800"
                             />
+                            {/* Unidade % */}
+                            <span className="absolute right-3 top-11 text-lg font-semibold text-gray-500">%</span>
                         </div>
                     </div>
 
@@ -300,6 +332,12 @@ const App = () => {
                                 *Soma do Imposto + Lucro é maior ou igual a 100%. Ajuste as margens para que o cálculo seja possível.
                             </p>
                         )}
+                        {/* Mensagem de Feedback da Transferência */}
+                        {feedbackMessage && (
+                            <div className="mt-4 p-2 bg-yellow-100 text-yellow-800 rounded-lg text-center font-medium">
+                                {feedbackMessage}
+                            </div>
+                        )}
                     </div>
                 </section>
 
@@ -320,7 +358,7 @@ const App = () => {
                                 {n}
                             </button>
                         ))}
-                        <button onClick={() => handleAuxOperator('/')} className="p-4 bg-orange-400 rounded-lg text-xl font-bold text-white hover:bg-orange-500 transition duration-150 shadow-md">
+                        <button onClick={() => handleAuxOperator('/')} className="p-4 bg-orange-500 rounded-lg text-xl font-bold text-white hover:bg-orange-600 transition duration-150 shadow-md">
                             /
                         </button>
 
@@ -330,8 +368,8 @@ const App = () => {
                                 {n}
                             </button>
                         ))}
-                        <button onClick={() => handleAuxOperator('*')} className="p-4 bg-orange-400 rounded-lg text-xl font-bold text-white hover:bg-orange-500 transition duration-150 shadow-md">
-                            *
+                        <button onClick={() => handleAuxOperator('*')} className="p-4 bg-orange-500 rounded-lg text-xl font-bold text-white hover:bg-orange-600 transition duration-150 shadow-md">
+                            x
                         </button>
 
                         {/* Linha 3 */}
@@ -340,27 +378,30 @@ const App = () => {
                                 {n}
                             </button>
                         ))}
-                        <button onClick={() => handleAuxOperator('-')} className="p-4 bg-orange-400 rounded-lg text-xl font-bold text-white hover:bg-orange-500 transition duration-150 shadow-md">
+                        <button onClick={() => handleAuxOperator('-')} className="p-4 bg-orange-500 rounded-lg text-xl font-bold text-white hover:bg-orange-600 transition duration-150 shadow-md">
                             -
                         </button>
 
                         {/* Linha 4 */}
-                        <button onClick={() => handleAuxNumber('0')} className="p-4 bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
-                            0
-                        </button>
                         <button onClick={handleAuxDecimal} className="p-4 bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
                             .
+                        </button>
+                        <button onClick={() => handleAuxNumber('0')} className="p-4 bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
+                            0
                         </button>
                         <button onClick={handleAuxClear} className="p-4 bg-red-500 rounded-lg text-xl font-bold text-white hover:bg-red-600 transition duration-150 shadow-md">
                             C
                         </button>
-                        <button onClick={() => handleAuxOperator('+')} className="p-4 bg-orange-400 rounded-lg text-xl font-bold text-white hover:bg-orange-500 transition duration-150 shadow-md">
+                        <button onClick={() => handleAuxOperator('+')} className="p-4 bg-orange-500 rounded-lg text-xl font-bold text-white hover:bg-orange-600 transition duration-150 shadow-md">
                             +
                         </button>
 
-                        {/* Linha Final (Sinal de igual) */}
-                        <button onClick={handleAuxEquals} className="col-span-4 p-4 mt-2 bg-green-500 rounded-lg text-2xl font-bold text-white hover:bg-green-600 transition duration-150 shadow-lg">
+                        {/* Linha Final (Sinal de igual e Botão USAR) */}
+                        <button onClick={handleAuxEquals} className="col-span-2 p-4 mt-2 bg-green-500 rounded-lg text-2xl font-bold text-white hover:bg-green-600 transition duration-150 shadow-lg">
                             =
+                        </button>
+                         <button onClick={useAuxResult} className="col-span-2 p-4 mt-2 bg-purple-500 rounded-lg text-2xl font-bold text-white hover:bg-purple-600 transition duration-150 shadow-lg">
+                            Usar
                         </button>
                     </div>
                 </section>
@@ -369,7 +410,20 @@ const App = () => {
     );
 };
 
-// Renderiza o componente React na raiz do DOM
-ReactDOM.render(<App />, document.getElementById('root'));
+// --- CORREÇÃO DA INICIALIZAÇÃO DO REACT (Revisada) ---
+// Adiciona um controle global (window.reactRoot) para garantir que createRoot() seja 
+// chamado apenas uma vez, resolvendo o aviso de container já utilizado.
+const rootElement = document.getElementById('root');
+
+if (rootElement) {
+    if (!window.reactRoot) {
+        // Se a raiz não foi criada, cria e armazena globalmente.
+        window.reactRoot = ReactDOM.createRoot(rootElement);
+    }
+    // Sempre chama render() na instância existente.
+    window.reactRoot.render(<App />);
+}
+// --- FIM DA CORREÇÃO ---
+
 
 export default App;
