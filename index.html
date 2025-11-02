@@ -1,403 +1,375 @@
-DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Calculadora de Precificação NAZIREU DRIGUEX</title>
-    <!-- Carrega Tailwind CSS para Estilo -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Carrega as bibliotecas React e ReactDOM -->
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <!-- Carrega Babel para compilar o JSX do React no navegador -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <style>
-        /* Define a fonte Inter como padrão */
-        body {
-            font-family: 'Inter', sans-serif;
+                  import React, { useState, useCallback, useEffect } from 'react';
+import ReactDOM from 'react-dom';
+
+// Componente principal App
+const App = () => {
+    // --- ESTADO DA APLICAÇÃO ---
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [passwordInput, setPasswordInput] = useState('');
+
+    // Estado para os campos de entrada da precificação
+    const [custo, setCusto] = useState('');
+    const [imposto, setImposto] = useState('');
+    const [lucro, setLucro] = useState('');
+    // Estado para o resultado final
+    const [precoVenda, setPrecoVenda] = useState('R$ 0,00');
+
+    // Estado para a calculadora auxiliar (rascunho)
+    const [auxDisplay, setAuxDisplay] = useState('0');
+    const [auxValue, setAuxValue] = useState(null);
+    const [auxOperator, setAuxOperator] = useState(null);
+    const [waitingForNewValue, setWaitingForNewValue] = useState(false);
+
+    // --- FUNÇÕES DE UTENSÍLIO ---
+
+    // Função para formatar o valor como moeda brasileira (R$)
+    const formatCurrency = (value) => {
+        if (value === null || isNaN(value)) return 'R$ 0,00';
+        return new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL'
+        }).format(value);
+    };
+
+    // Função para limpar e normalizar números (troca vírgula por ponto, remove R$)
+    const normalizeNumber = (input) => {
+        if (!input) return 0;
+        // Permite que o usuário use vírgula como separador decimal no input
+        return parseFloat(String(input).replace(/[R$\s]/g, '').replace(',', '.'));
+    };
+    
+    // Função auxiliar para lidar com a imprecisão do floating point (usada na calculadora auxiliar)
+    const preciseOp = (op, a, b) => {
+        const factor = 100000; // Fator de precisão (para evitar 0.1 + 0.2 = 0.30000000000000004)
+        a = Math.round(a * factor);
+        b = Math.round(b * factor);
+
+        switch (op) {
+            case '+': return (a + b) / factor;
+            case '-': return (a - b) / factor;
+            case '*': return (a * b) / (factor * factor); // Ajuste para multiplicação
+            case '/': 
+                // Evita divisão por zero
+                if (b === 0) return 'Erro';
+                // Para a divisão, fazemos a operação com o fator e dividimos pelo fator
+                return (a / factor) / (b / factor);
+            default: return 0;
         }
-    </style>
-</head>
-<body>
-    <div id="root"></div>
+    };
 
-    <script type="text/babel">
-        // Código React/JSX do arquivo calculadora_react.jsx
+
+    // --- LÓGICA DE AUTENTICAÇÃO ---
+
+    const handleLogin = useCallback((e) => {
+        e.preventDefault();
+        // A senha de acesso é 'krairous007'
+        if (passwordInput === 'krairous007') {
+            setIsAuthenticated(true);
+        } else {
+            // Não usando alert() conforme instruído
+            console.log('Senha incorreta.'); 
+            setPasswordInput('');
+        }
+    }, [passwordInput]);
+
+    // --- LÓGICA PRINCIPAL DE PRECIFICAÇÃO (Corrigida) ---
+
+    const calculatePrecoVenda = useCallback(() => {
+        const C = normalizeNumber(custo);
+        const I = normalizeNumber(imposto);
+        const L = normalizeNumber(lucro);
+
+        // Verifica se os valores são válidos
+        if (C <= 0 || isNaN(C)) {
+            setPrecoVenda('R$ 0,00');
+            return;
+        }
+
+        // Soma os percentuais de Markup (Imposto + Lucro)
+        const markupPercentual = (I / 100) + (L / 100);
+
+        // Garante que o markup não seja maior ou igual a 1 (100%)
+        if (markupPercentual >= 1) {
+            setPrecoVenda('MARGEM INVÁLIDA');
+            return;
+        }
+
+        // Aplica a fórmula do Preço de Venda com Markup Integral 
+        // Preço de Venda = Custo / (1 - Markup Percentual)
+        const PV = C / (1 - markupPercentual);
+
+        // Limita o resultado a 2 casas decimais para formatação de moeda
+        setPrecoVenda(formatCurrency(PV));
+    }, [custo, imposto, lucro]);
+
+    // Efeito para recalcular o preço sempre que os inputs mudarem
+    useEffect(() => {
+        calculatePrecoVenda();
+    }, [custo, imposto, lucro, calculatePrecoVenda]);
+
+    // --- LÓGICA DA CALCULADORA AUXILIAR (Aprimorada) ---
+
+    const handleAuxNumber = useCallback((num) => {
+        if (auxDisplay === '0' || waitingForNewValue) {
+            setAuxDisplay(String(num));
+            setWaitingForNewValue(false);
+        } else {
+            // Limita a 15 dígitos para evitar overflow de display
+            if (auxDisplay.length < 15) {
+                setAuxDisplay(auxDisplay + String(num));
+            }
+        }
+    }, [auxDisplay, waitingForNewValue]);
+
+    const handleAuxDecimal = useCallback(() => {
+        if (waitingForNewValue) {
+            setAuxDisplay('0.');
+            setWaitingForNewValue(false);
+        } else if (!auxDisplay.includes('.')) {
+            setAuxDisplay(auxDisplay + '.');
+        }
+    }, [auxDisplay, waitingForNewValue]);
+
+    const handleAuxClear = useCallback(() => {
+        setAuxDisplay('0');
+        setAuxValue(null);
+        setAuxOperator(null);
+        setWaitingForNewValue(false);
+    }, []);
+
+    const handleAuxEquals = useCallback(() => {
+        if (auxOperator === null || auxValue === null) return;
+
+        const nextVal = parseFloat(auxDisplay);
+        const result = preciseOp(auxOperator, auxValue, nextVal);
+
+        // Verifica se houve erro de divisão por zero
+        if (result === 'Erro') {
+            setAuxDisplay('Erro');
+        } else {
+            // Limita a 8 casas decimais e remove zeros à direita
+            const resultString = parseFloat(result.toFixed(8)).toString();
+            setAuxDisplay(resultString);
+        }
         
-        // Constantes de estilo (Cores do projeto Python)
-        const COR_PRINCIPAL = '#2962FF'; // Azul forte
-        const COR_DESTAQUE = '#FFA000'; // Laranja para botões de ação
-        const COR_FUNDO = '#F9FAFB';    // Cinza claro / Quase branco
-        const COR_TEXTO = '#374151';    // Cinza escuro para texto
+        setAuxValue(null);
+        setAuxOperator(null);
+        setWaitingForNewValue(true);
 
-        // --- Componente da Calculadora Auxiliar Simples (Mobile) ---
-        const CalculadoraAuxiliar = ({ onSelectNumber }) => {
-            const [display, setDisplay] = React.useState('0');
-            const [currentNumber, setCurrentNumber] = React.useState(null);
-            const [operator, setOperator] = React.useState(null);
-            const [waitingForNewNumber, setWaitingForNewNumber] = React.useState(true);
+    }, [auxDisplay, auxOperator, auxValue]);
 
-            const handleNumber = (number) => {
-                if (waitingForNewNumber) {
-                    setDisplay(number);
-                    setWaitingForNewNumber(false);
-                } else {
-                    setDisplay(display === '0' ? number : display + number);
-                }
-            };
+    const handleAuxOperator = useCallback((nextOperator) => {
+        const inputVal = parseFloat(auxDisplay);
 
-            const handleDecimal = () => {
-                if (!display.includes('.')) {
-                    setDisplay(display + '.');
-                    setWaitingForNewNumber(false);
-                }
-            };
+        if (auxValue === null || waitingForNewValue) {
+            // Armazena o primeiro valor ou o resultado de um cálculo anterior
+            setAuxValue(inputVal);
+        } else {
+            // Se já tem um operador e um valor anterior, calcula o resultado intermediário
+            const result = preciseOp(auxOperator, auxValue, inputVal);
+            
+            if (result === 'Erro') {
+                 setAuxDisplay('Erro');
+                 setAuxValue(null);
+                 setAuxOperator(null);
+            } else {
+                const resultString = parseFloat(result.toFixed(8)).toString();
+                setAuxDisplay(resultString);
+                setAuxValue(result);
+            }
+        }
+        
+        setAuxOperator(nextOperator);
+        setWaitingForNewValue(true);
 
-            const handleOperator = (nextOperator) => {
-                const inputValue = parseFloat(display);
-
-                if (currentNumber === null) {
-                    setCurrentNumber(inputValue);
-                } else if (operator) {
-                    const result = performCalculation[operator](currentNumber, inputValue);
-                    setCurrentNumber(result);
-                    setDisplay(String(result));
-                }
-
-                setWaitingForNewNumber(true);
-                setOperator(nextOperator);
-            };
-
-            const performCalculation = {
-                '/': (first, second) => first / second,
-                '*': (first, second) => first * second,
-                '-': (first, second) => first - second,
-                '+': (first, second) => first + second,
-            };
-
-            const handleEqual = () => {
-                const inputValue = parseFloat(display);
-                if (currentNumber !== null && operator) {
-                    const result = performCalculation[operator](currentNumber, inputValue);
-                    setDisplay(String(result));
-                    setCurrentNumber(null);
-                    setOperator(null);
-                    setWaitingForNewNumber(true);
-                }
-            };
-
-            const handleClear = () => {
-                setDisplay('0');
-                setCurrentNumber(null);
-                setOperator(null);
-                setWaitingForNewNumber(true);
-            };
-
-            const handleCopyToMain = () => {
-                // Envia o número atual para ser usado no campo principal (Markup)
-                onSelectNumber(display);
-            };
-
-            const buttons = [
-                '7', '8', '9', '/',
-                '4', '5', '6', '*',
-                '1', '2', '3', '-',
-                '0', '.', '=', '+',
-            ];
-
-            return (
-                <div className="flex flex-col h-full bg-gray-200 p-4 rounded-lg shadow-inner">
-                    <div className="text-xl font-bold mb-3 text-center text-gray-700">CALCULADORA AUXILIAR</div>
-                    
-                    {/* Display */}
-                    <div className="bg-white text-right p-4 mb-3 text-3xl font-light rounded-lg shadow-md border border-gray-300">
-                        {display}
-                    </div>
-
-                    {/* Teclado */}
-                    <div className="grid grid-cols-4 gap-2 flex-grow">
-                        {buttons.map((btn) => (
-                            <button
-                                key={btn}
-                                onClick={() => {
-                                    if (/\d/.test(btn)) handleNumber(btn);
-                                    else if (btn === '.') handleDecimal();
-                                    else if (['/', '*', '-', '+'].includes(btn)) handleOperator(btn);
-                                    else if (btn === '=') handleEqual();
-                                }}
-                                className={`
-                                    p-4 text-xl font-semibold rounded-lg transition duration-150 ease-in-out
-                                    ${['/', '*', '-', '+', '='].includes(btn)
-                                        ? (btn === '=' ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-orange-500 text-white hover:bg-orange-600')
-                                        : 'bg-blue-600 text-white hover:bg-blue-700'
-                                    }
-                                `}
-                            >
-                                {btn === '*' ? 'x' : btn === '/' ? '÷' : btn}
-                            </button>
-                        ))}
-                        {/* Botões de Ação */}
-                        <button
-                            onClick={handleClear}
-                            className="col-span-2 p-4 text-xl font-semibold rounded-lg bg-red-500 text-white hover:bg-red-600 transition duration-150 ease-in-out"
-                        >
-                            C
-                        </button>
-                        <button
-                            onClick={handleCopyToMain}
-                            title="Copiar resultado para o campo principal"
-                            className="col-span-2 p-4 text-lg font-semibold rounded-lg bg-indigo-500 text-white hover:bg-indigo-600 transition duration-150 ease-in-out"
-                        >
-                            Usar
-                        </button>
-                    </div>
-                </div>
-            );
-        };
-
-        // --- Componente da Calculadora de Precificação (Markup) ---
-        const CalculadoraMarkup = () => {
-            const [custo, setCusto] = React.useState('');
-            const [imposto, setImposto] = React.useState('');
-            const [margem, setMargem] = React.useState('');
-            const [precoVenda, setPrecoVenda] = React.useState('R$ 0,00');
-            const [message, setMessage] = React.useState('');
-
-            // Função central de cálculo, replicada do código Python
-            const calcularPrecoVenda = () => {
-                setMessage('');
-                try {
-                    const c = parseFloat(custo.replace(',', '.') || 0);
-                    const i = parseFloat(imposto.replace(',', '.') || 0);
-                    const m = parseFloat(margem.replace(',', '.') || 0);
-
-                    if (isNaN(c) || isNaN(i) || isNaN(m) || c < 0 || i < 0 || m < 0) {
-                        setMessage("Por favor, insira números válidos e positivos.");
-                        setPrecoVenda('R$ 0,00');
-                        return;
-                    }
-
-                    // Fator de Divisão (Imposto + Margem)
-                    const fator = (i + m) / 100;
-
-                    if (fator >= 1.0) {
-                        setMessage("ERRO: Imposto + Lucro (>= 100%) inviabiliza a venda!");
-                        setPrecoVenda('R$ 0,00');
-                        return;
-                    }
-
-                    // Preço de Venda = Custo / (1 - Fator)
-                    const pv = c / (1 - fator);
-
-                    if (pv < c) {
-                         setMessage("ERRO: Cálculo resultou em preço menor que o custo. Verifique os valores.");
-                         setPrecoVenda('R$ 0,00');
-                         return;
-                    }
-
-                    // Formatação do resultado (moeda brasileira)
-                    const formatoMoeda = new Intl.NumberFormat('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL',
-                    }).format(pv);
-
-                    setPrecoVenda(formatoMoeda);
-
-                } catch (error) {
-                    setMessage("Ocorreu um erro no cálculo. Verifique os dados.");
-                    setPrecoVenda('R$ 0,00');
-                }
-            };
-
-            const handleSelectNumber = (numStr) => {
-                // Assume que o usuário quer colocar o resultado auxiliar no campo CUSTO
-                setCusto(numStr.replace('.', ','));
-                setMessage('Valor copiado para o campo "1. Custo do Produto (R$)"');
-            };
-
-            // Função para tratar inputs (apenas números e vírgula/ponto)
-            const handleInputChange = (e, setter) => {
-                let value = e.target.value.replace(/[^0-9,.]/g, '');
-                // Permite apenas um ponto ou vírgula
-                value = value.replace(/,/g, '.'); // Padroniza para ponto
-                setter(value);
-            };
-
-            // Componente Input reutilizável
-            const InputField = ({ label, value, setter, placeholder, suffix = '' }) => (
-                <div className="mb-3">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                        {label}
-                    </label>
-                    <div className="flex items-center border border-gray-300 rounded-lg shadow-sm focus-within:ring-2 focus-within:ring-blue-500">
-                        <input
-                            type="text"
-                            value={value}
-                            onChange={(e) => handleInputChange(e, setter)}
-                            placeholder={placeholder}
-                            className="w-full p-3 bg-white text-gray-800 focus:outline-none rounded-l-lg"
-                            inputMode="decimal"
-                        />
-                        {suffix && (
-                            <span className="p-3 bg-gray-100 text-gray-500 rounded-r-lg border-l border-gray-300">{suffix}</span>
-                        )}
-                    </div>
-                </div>
-            );
-
-            return (
-                <div className="flex flex-col lg:flex-row h-full w-full max-w-7xl mx-auto p-4 md:p-6 lg:p-8 bg-white rounded-xl shadow-2xl space-y-6 lg:space-y-0 lg:space-x-6">
-                    
-                    {/* --- Coluna da Precificação (Markup) --- */}
-                    <div className="flex flex-col w-full lg:w-1/2 p-4 bg-gray-50 rounded-lg shadow-md border border-gray-200">
-                        <h2 className="text-xl md:text-2xl font-extrabold text-center text-blue-800 mb-6 border-b pb-2">
-                            Cálculo de Preço de Venda (Markup Integrado)
-                        </h2>
-
-                        <div className="space-y-4">
-                            <InputField
-                                label="1. Custo do Produto (R$)"
-                                value={custo}
-                                setter={setCusto}
-                                placeholder="Ex: 50.00"
-                                suffix="R$"
-                            />
-                            <InputField
-                                label="2. Imposto Total (%)"
-                                value={imposto}
-                                setter={setImposto}
-                                placeholder="Ex: 18.00"
-                                suffix="%"
-                            />
-                            <InputField
-                                label="3. Margem de Lucro Desejada (%)"
-                                value={margem}
-                                setter={setMargem}
-                                placeholder="Ex: 25.00"
-                                suffix="%"
-                            />
-                        </div>
-
-                        <button
-                            onClick={calcularPrecoVenda}
-                            className="mt-6 w-full p-4 text-white text-lg font-bold rounded-lg shadow-lg transition duration-200 ease-in-out"
-                            style={{ backgroundColor: COR_DESTAQUE, boxShadow: `0 4px 6px -1px rgba(255, 160, 0, 0.4)` }}
-                        >
-                            CALCULAR PREÇO DE VENDA
-                        </button>
-
-                        {/* Área de Resultado */}
-                        <div className="mt-8 p-4 bg-blue-100 border border-blue-300 rounded-lg text-center shadow-inner">
-                            <p className="text-sm font-semibold text-blue-700 mb-2">PREÇO DE VENDA FINAL CALCULADO:</p>
-                            <div className="text-4xl font-extrabold text-blue-900 break-words">
-                                {precoVenda}
-                            </div>
-                        </div>
-                        
-                        {/* Mensagens de Erro/Alerta */}
-                        {message && (
-                            <div className="mt-4 p-3 text-center text-sm font-medium bg-red-100 text-red-700 border border-red-300 rounded-lg">
-                                {message}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* --- Coluna da Calculadora Auxiliar --- */}
-                    <div className="w-full lg:w-1/2 p-0">
-                        <CalculadoraAuxiliar onSelectNumber={handleSelectNumber} />
-                    </div>
-                </div>
-            );
-        };
+    }, [auxDisplay, auxValue, waitingForNewValue, auxOperator]);
 
 
-        // --- Componente de Acesso Restrito (Login) ---
-        const LoginScreen = ({ onLoginSuccess }) => {
-            const [password, setPassword] = React.useState('');
-            const [error, setError] = React.useState('');
-            // Manter a senha original 'krairous007'
-            const requiredPassword = 'krairous007'; 
+    // --- RENDERIZAÇÃO DE COMPONENTES ---
 
-            const handleLogin = (e) => {
-                e.preventDefault();
-                setError('');
-
-                if (password === requiredPassword) {
-                    onLoginSuccess();
-                } else {
-                    setError('Senha incorreta. Tente novamente.');
-                    setPassword('');
-                }
-            };
-
-            return (
-                <div className="flex items-center justify-center min-h-screen bg-gray-100">
-                    <form onSubmit={handleLogin} className="p-8 bg-white rounded-xl shadow-2xl w-full max-w-sm text-center">
-                        <h1 className="text-3xl font-extrabold mb-2 text-gray-800">ACESSO RESTRITO</h1>
-                        {/* Nome do sistema atualizado */}
-                        <p className="text-gray-600 mb-6">SISTEMA DE PRECIFICAÇÃO INTEGRADA NAZIREU DRIGUEX</p>
-                        
-                        <div className="mb-6">
-                            <label htmlFor="password" className="block text-lg font-medium text-gray-700 mb-2">
-                                Digite a senha:
-                            </label>
+    // 1. Tela de Acesso Restrito
+    if (!isAuthenticated) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-gray-100">
+                <div className="p-8 bg-white shadow-xl rounded-lg w-full max-w-sm">
+                    <h1 className="text-2xl font-bold text-gray-800 mb-6 text-center">ACESSO RESTRITO</h1>
+                    <form onSubmit={handleLogin} className="space-y-4">
+                        <div>
+                            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">Digite a senha:</label>
                             <input
                                 id="password"
                                 type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full p-3 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-center text-xl"
+                                value={passwordInput}
+                                onChange={(e) => setPasswordInput(e.target.value)}
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-lg"
+                                placeholder="******"
                                 required
                             />
                         </div>
-
-                        {error && (
-                            <p className="text-red-600 text-sm mb-4 font-semibold">{error}</p>
-                        )}
-
                         <button
                             type="submit"
-                            className="w-full py-3 px-4 bg-blue-600 text-white font-bold rounded-lg shadow-md hover:bg-blue-700 transition duration-150 ease-in-out text-lg"
+                            className="w-full py-2 px-4 border border-transparent rounded-lg shadow-sm text-lg font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150"
                         >
                             ENTRAR
                         </button>
                     </form>
+                    <p className="mt-4 text-xs text-center text-gray-500">
+                        A senha é: krairous007
+                    </p>
                 </div>
-            );
-        };
+            </div>
+        );
+    }
 
+    // 2. Tela Principal da Calculadora
+    return (
+        <div className="p-4 sm:p-8 min-h-screen bg-gray-100 font-sans">
+            <script src="https://cdn.tailwindcss.com"></script>
+            {/* Título Principal */}
+            <header className="mb-8 text-center">
+                <h1 className="text-3xl sm:text-4xl font-extrabold text-blue-700 shadow-sm py-2">
+                    SISTEMA DE PRECIFICAÇÃO INTEGRADA KRAIROUS
+                </h1>
+            </header>
 
-        // --- Componente Principal da Aplicação ---
-        const App = () => {
-            const [isLoggedIn, setIsLoggedIn] = React.useState(false);
+            {/* Container Principal com Layout de Grid (Responsivo) */}
+            <main className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+                
+                {/* 1. CALCULADORA DE PRECIFICAÇÃO (COLUNA ESQUERDA) */}
+                <section className="bg-white p-6 sm:p-8 rounded-xl shadow-2xl border-t-4 border-blue-600 lg:col-span-2">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-3">Cálculo de Preço de Venda (Markup Integrado)</h2>
 
-            const handleLoginSuccess = () => {
-                setIsLoggedIn(true);
-            };
-
-            // Renderiza o login ou a calculadora
-            return (
-                <div className="min-h-screen" style={{ backgroundColor: COR_FUNDO, fontFamily: 'Inter, sans-serif' }}>
-                    {isLoggedIn ? (
-                        <div className="pt-10 pb-10">
-                            <h1 className="text-3xl md:text-4xl font-extrabold text-center mb-8" style={{ color: COR_PRINCIPAL }}>
-                                {/* Nome do sistema atualizado */}
-                                SISTEMA DE PRECIFICAÇÃO INTEGRADA NAZIREU DRIGUEX
-                            </h1>
-                            <CalculadoraMarkup />
+                    <div className="space-y-6">
+                        {/* Custo do Produto */}
+                        <div>
+                            <label htmlFor="custo" className="block text-lg font-medium text-gray-700 mb-2">1. Custo do Produto (R$):</label>
+                            <input
+                                id="custo"
+                                type="text"
+                                // Permite apenas números, ponto e vírgula, e usa vírgula para formatação no display
+                                value={custo}
+                                onChange={(e) => setCusto(e.target.value.replace(/[^0-9,.]/g, ''))}
+                                placeholder="0,00"
+                                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-orange-500 focus:border-orange-500 text-xl text-gray-800"
+                            />
                         </div>
-                    ) : (
-                        <LoginScreen onLoginSuccess={handleLoginSuccess} />
-                    )}
-                </div>
-            );
-        };
 
-        // --- Novo método de renderização do React 18 (Substitui ReactDOM.render) ---
-        const container = document.getElementById('root');
-        const root = ReactDOM.createRoot(container);
-        root.render(<App />);
+                        {/* Imposto Total (%) */}
+                        <div>
+                            <label htmlFor="imposto" className="block text-lg font-medium text-gray-700 mb-2">2. Imposto Total (%):</label>
+                            <input
+                                id="imposto"
+                                type="text"
+                                value={imposto}
+                                onChange={(e) => setImposto(e.target.value.replace(/[^0-9,.]/g, ''))}
+                                placeholder="0"
+                                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-orange-500 focus:border-orange-500 text-xl text-gray-800"
+                            />
+                        </div>
 
-    </script>
-</body>
-</html>
+                        {/* Margem de Lucro Desejada (%) */}
+                        <div>
+                            <label htmlFor="lucro" className="block text-lg font-medium text-gray-700 mb-2">3. Margem de Lucro Desejada (%):</label>
+                            <input
+                                id="lucro"
+                                type="text"
+                                value={lucro}
+                                onChange={(e) => setLucro(e.target.value.replace(/[^0-9,.]/g, ''))}
+                                placeholder="0"
+                                className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-orange-500 focus:border-orange-500 text-xl text-gray-800"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Botão de Cálculo (Recálculo é automático, mas mantido para UX) */}
+                    <button
+                        onClick={calculatePrecoVenda}
+                        className="w-full mt-8 py-3 px-6 rounded-xl text-xl font-extrabold text-white bg-orange-500 hover:bg-orange-600 transition duration-200 shadow-lg transform hover:scale-[1.01] focus:outline-none focus:ring-4 focus:ring-orange-300"
+                    >
+                        CALCULAR PREÇO DE VENDA
+                    </button>
+
+                    {/* Resultado Final */}
+                    <div className="mt-8 pt-6 border-t border-gray-200">
+                        <p className="text-xl font-semibold text-blue-600 mb-2">PREÇO DE VENDA FINAL CALCULADO:</p>
+                        <div className={`text-4xl font-extrabold p-4 rounded-xl text-center shadow-inner ${precoVenda.includes('R$') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            {precoVenda}
+                        </div>
+                        {precoVenda === 'MARGEM INVÁLIDA' && (
+                            <p className="text-sm text-red-500 mt-2 text-center">
+                                *Soma do Imposto + Lucro é maior ou igual a 100%. Ajuste as margens para que o cálculo seja possível.
+                            </p>
+                        )}
+                    </div>
+                </section>
+
+                {/* 2. CALCULADORA AUXILIAR (COLUNA DIREITA) */}
+                <section className="bg-white p-6 sm:p-8 rounded-xl shadow-2xl border-t-4 border-gray-400 lg:col-span-1">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-6 border-b pb-3 text-center">CALCULADORA AUXILIAR</h2>
+
+                    {/* Display da Calculadora Auxiliar */}
+                    <div className="bg-gray-800 text-white text-3xl font-mono text-right p-4 rounded-xl mb-4 overflow-hidden shadow-inner h-16 flex items-center justify-end">
+                        {auxDisplay.length > 15 ? auxDisplay.substring(0, 15) + '...' : auxDisplay}
+                    </div>
+                    
+                    {/* Teclado da Calculadora Auxiliar */}
+                    <div className="grid grid-cols-4 gap-2">
+                        {/* Linha 1 */}
+                        {['7', '8', '9'].map(n => (
+                            <button key={n} onClick={() => handleAuxNumber(n)} className="p-4 bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
+                                {n}
+                            </button>
+                        ))}
+                        <button onClick={() => handleAuxOperator('/')} className="p-4 bg-orange-400 rounded-lg text-xl font-bold text-white hover:bg-orange-500 transition duration-150 shadow-md">
+                            /
+                        </button>
+
+                        {/* Linha 2 */}
+                        {['4', '5', '6'].map(n => (
+                            <button key={n} onClick={() => handleAuxNumber(n)} className="p-4 bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
+                                {n}
+                            </button>
+                        ))}
+                        <button onClick={() => handleAuxOperator('*')} className="p-4 bg-orange-400 rounded-lg text-xl font-bold text-white hover:bg-orange-500 transition duration-150 shadow-md">
+                            *
+                        </button>
+
+                        {/* Linha 3 */}
+                        {['1', '2', '3'].map(n => (
+                            <button key={n} onClick={() => handleAuxNumber(n)} className="p-4 bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
+                                {n}
+                            </button>
+                        ))}
+                        <button onClick={() => handleAuxOperator('-')} className="p-4 bg-orange-400 rounded-lg text-xl font-bold text-white hover:bg-orange-500 transition duration-150 shadow-md">
+                            -
+                        </button>
+
+                        {/* Linha 4 */}
+                        <button onClick={() => handleAuxNumber('0')} className="p-4 bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
+                            0
+                        </button>
+                        <button onClick={handleAuxDecimal} className="p-4 bg-gray-200 rounded-lg text-xl font-bold hover:bg-gray-300 transition duration-150 shadow-md">
+                            .
+                        </button>
+                        <button onClick={handleAuxClear} className="p-4 bg-red-500 rounded-lg text-xl font-bold text-white hover:bg-red-600 transition duration-150 shadow-md">
+                            C
+                        </button>
+                        <button onClick={() => handleAuxOperator('+')} className="p-4 bg-orange-400 rounded-lg text-xl font-bold text-white hover:bg-orange-500 transition duration-150 shadow-md">
+                            +
+                        </button>
+
+                        {/* Linha Final (Sinal de igual) */}
+                        <button onClick={handleAuxEquals} className="col-span-4 p-4 mt-2 bg-green-500 rounded-lg text-2xl font-bold text-white hover:bg-green-600 transition duration-150 shadow-lg">
+                            =
+                        </button>
+                    </div>
+                </section>
+            </main>
+        </div>
+    );
+};
+
+// Renderiza o componente React na raiz do DOM
+ReactDOM.render(<App />, document.getElementById('root'));
+
+export default App;
